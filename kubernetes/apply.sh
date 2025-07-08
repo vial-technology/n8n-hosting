@@ -1,40 +1,72 @@
 #!/bin/bash
 
-echo "Applying nginx-ingress-controller..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=90s
+# =============================================================================
+# N8N Kubernetes Deployment Script
+# =============================================================================
+# This script deploys n8n with all required dependencies to a Kubernetes cluster
+# including Istio, cert-manager, PostgreSQL, and the n8n application itself.
 
-echo "Apply cert-manager..."
+set -e  # Exit on any error
+
+# =============================================================================
+# 1. INSTALL ISTIO AND GATEWAY API
+# =============================================================================
+echo "🔧 Installing Gateway API CRDs..."
+kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
+  { kubectl kustomize "github.com/kubernetes-sigs/gateway-api/config/crd?ref=v1.3.0" | kubectl apply -f -; }
+
+echo "🔧 Installing Istio..."
+istioctl install --set profile=minimal -y
+
+echo "🔧 Setting up Istio ingress namespace and gateway..."
+kubectl create namespace istio-ingress &> /dev/null || true
+kubectl apply -f n8n-ingress.yaml
+kubectl wait -n istio-ingress --for=condition=programmed gateways.gateway.networking.k8s.io n8n-gateway
+
+# =============================================================================
+# 2. INSTALL CERT-MANAGER AND SSL CERTIFICATES
+# =============================================================================
+echo "🔐 Installing cert-manager..."
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
 
-echo "Apply letsencrypt-prod..."
+echo "🔐 Configuring Let's Encrypt production certificates..."
 kubectl apply -f letsencrypt-prod.yaml
 
-echo "Applying n8n ingress..."
-kubectl apply -f n8n-ingress.yaml
-
-echo "Applying n8n Kubernetes resources..."
-
-echo "Applying updated PostgreSQL secret..."
+# =============================================================================
+# 3. DEPLOY DATABASE LAYER
+# =============================================================================
+echo "🗄️  Deploying PostgreSQL..."
 kubectl apply -f postgres-secret.yaml
-
-echo "Applying updated PostgreSQL deployment..."
 kubectl apply -f postgres-deployment.yaml
 
-echo "Waiting for PostgreSQL to be ready..."
+echo "⏳ Waiting for PostgreSQL to be ready..."
 kubectl wait --for=condition=ready pod -l service=postgres-n8n -n n8n --timeout=300s
 
-echo "Applying updated n8n deployment..."
-kubectl apply -f n8n-deployment.yaml
+# =============================================================================
+# 4. DEPLOY N8N APPLICATION
+# =============================================================================
+echo "🚀 Deploying n8n services..."
+kubectl apply -f n8n-service.yaml
+kubectl apply -f n8n-service-local.yaml
 
-echo "Waiting for n8n to be ready..."
+echo "🚀 Deploying n8n application..."
+kubectl apply -f n8n-deployment.yaml
+kubectl apply -f n8n-deployment-local.yaml
+
+echo "⏳ Waiting for n8n to be ready..."
 kubectl wait --for=condition=ready pod -l service=n8n -n n8n --timeout=300s
 
-echo "Checking pod status..."
+# =============================================================================
+# 5. VERIFICATION AND STATUS
+# =============================================================================
+echo "✅ Deployment complete! Checking status..."
+echo ""
+echo "📊 Pod status:"
 kubectl get pods -n n8n
 
-echo "Checking n8n logs..."
+echo ""
+echo "📋 Recent n8n logs:"
 kubectl logs -l service=n8n -n n8n --tail=50
+
+echo ""
+echo "🎉 Deployment finished successfully!"

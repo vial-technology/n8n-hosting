@@ -1,24 +1,40 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: n8n-ingress
-  namespace: n8n
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  name: n8n-gateway
+  namespace: istio-ingress
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - n8n.vial.com
-      secretName: n8n-tls
+  gatewayClassName: istio
+  listeners:
+    - name: https
+      hostname: "n8n.vial.com"
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: n8n-tls-cert
+            namespace: istio-ingress
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: n8n-route
+  namespace: n8n
+spec:
+  parentRefs:
+    - name: n8n-gateway
+      namespace: istio-ingress
+  hostnames:
+    - "n8n.vial.com"
   rules:
-    - host: n8n.vial.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: n8n
-                port:
-                  number: 5678
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: n8n
+          port: 5678
