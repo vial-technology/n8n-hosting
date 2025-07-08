@@ -47,11 +47,9 @@ kubectl wait --for=condition=ready pod -l service=postgres-n8n -n n8n --timeout=
 # =============================================================================
 echo "🚀 Deploying n8n services..."
 kubectl apply -f n8n-service.yaml
-kubectl apply -f n8n-service-local.yaml
 
 echo "🚀 Deploying n8n application..."
 kubectl apply -f n8n-deployment.yaml
-kubectl apply -f n8n-deployment-local.yaml
 
 echo "⏳ Waiting for n8n to be ready..."
 kubectl wait --for=condition=ready pod -l service=n8n -n n8n --timeout=300s

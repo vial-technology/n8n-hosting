@@ -10,5 +10,20 @@ spec:
       name: letsencrypt-prod
     solvers:
       - http01:
-          ingress:
-            class: nginx
+          gatewayHTTPRoute:
+            parentRefs:
+            - name: n8n-gateway
+              namespace: istio-ingress
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: n8n-tls-cert
+  namespace: istio-ingress
+spec:
+  secretName: n8n-tls-cert
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - n8n.vial.com
