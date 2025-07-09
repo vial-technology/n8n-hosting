@@ -16,6 +16,7 @@ spec:
     metadata:
       labels:
         service: n8n
+        istio.io/dataplane-mode: ambient
     spec:
       initContainers:
         - name: volume-permissions
